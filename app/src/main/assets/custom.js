@@ -34,51 +34,11 @@ function safeNavigate(url, targetWindow) {
     setTimeout(() => {
         console.log('[safeNavigate] 开始执行跳转')
         
-        // 策略1: 使用 location.replace（推荐，不保留历史）
-        try {
-            win.location.replace(url)
-            console.log('[safeNavigate] ✓ 使用 location.replace 跳转成功')
-            return
-        } catch (e) {
-            console.warn('[safeNavigate] ✗ location.replace 失败:', e)
-        }
-        
-        // 策略2: 使用 location.assign
-        try {
-            win.location.assign(url)
-            console.log('[safeNavigate] ✓ 使用 location.assign 跳转成功')
-            return
-        } catch (e) {
-            console.warn('[safeNavigate] ✗ location.assign 失败:', e)
-        }
-        
-        // 策略3: 直接设置 location.href
         try {
             win.location.href = url
             console.log('[safeNavigate] ✓ 使用 location.href 跳转成功')
-            return
         } catch (e) {
-            console.warn('[safeNavigate] ✗ location.href 失败:', e)
-        }
-        
-        // 策略4: 创建 <a> 标签并模拟点击
-        try {
-            const targetDoc = win.document || document
-            const anchor = targetDoc.createElement('a')
-            anchor.href = url
-            anchor.style.display = 'none'
-            targetDoc.body.appendChild(anchor)
-            anchor.click()
-            
-            setTimeout(() => {
-                try {
-                    targetDoc.body.removeChild(anchor)
-                } catch (e) {}
-            }, 100)
-            
-            console.log('[safeNavigate] ✓ 使用模拟点击跳转')
-        } catch (e) {
-            console.error('[safeNavigate] ✗ 所有跳转策略均失败:', e)
+            console.error('[safeNavigate] ✗ location.href 跳转失败:', e)
         }
     }, 10)
 }
