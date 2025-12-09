@@ -48,38 +48,69 @@ function safeNavigate(url, targetWindow) {
     
     console.log('[safeNavigate] 准备跳转:', finalUrl)
     console.log('[safeNavigate] 使用 window:', isTopWindow ? '当前窗口' : '顶层窗口/父窗口')
-    
-    // 执行跳转的内部函数
-    const performNavigation = () => {
+
+    // 验证跳转是否成功的辅助函数
+    const verifyNavigation = (expectedUrl, strategyName, resolve) => {
+        setTimeout(() => {
+            try {
+                const currentUrl = win.location.href
+                if (currentUrl === expectedUrl || currentUrl.startsWith(expectedUrl)) {
+                    console.log(`[safeNavigate] ✓ ${strategyName} 验证成功，当前 URL:`, currentUrl)
+                    resolve(true)
+                } else {
+                    console.warn(`[safeNavigate] ✗ ${strategyName} 执行但验证失败，当前 URL:`, currentUrl, '期望:', expectedUrl)
+                    resolve(false)
+                }
+            } catch (e) {
+                console.warn(`[safeNavigate] ✗ ${strategyName} 验证异常:`, e)
+                resolve(false)
+            }
+        }, 50) // 50ms 延迟验证
+    }
+
+    // 执行跳转的内部函数（Promise 链式尝试）
+    const performNavigation = async () => {
         console.log('[safeNavigate] 开始执行跳转')
-        
-        // 策略1: 使用 location.replace（推荐，不保留历史）
+
+        // 策略1: 直接设置 location.href（在 WebView 中通常最可靠）
         try {
-            win.location.replace(finalUrl)
-            console.log('[safeNavigate] ✓ 使用 location.replace 跳转成功')
-            return
+            const p1 = new Promise((resolve) => {
+                win.location.href = finalUrl
+                verifyNavigation(finalUrl, 'location.href', resolve)
+            })
+            if (await p1) {
+                return // 成功，结束
+            }
         } catch (e) {
-            console.warn('[safeNavigate] ✗ location.replace 失败:', e)
+            console.warn('[safeNavigate] ✗ location.href 异常:', e)
         }
-        
+
         // 策略2: 使用 location.assign
         try {
-            win.location.assign(finalUrl)
-            console.log('[safeNavigate] ✓ 使用 location.assign 跳转成功')
-            return
+            const p2 = new Promise((resolve) => {
+                win.location.assign(finalUrl)
+                verifyNavigation(finalUrl, 'location.assign', resolve)
+            })
+            if (await p2) {
+                return // 成功，结束
+            }
         } catch (e) {
-            console.warn('[safeNavigate] ✗ location.assign 失败:', e)
+            console.warn('[safeNavigate] ✗ location.assign 异常:', e)
         }
-        
-        // 策略3: 直接设置 location.href
+
+        // 策略3: 使用 location.replace（不保留历史）
         try {
-            win.location.href = finalUrl
-            console.log('[safeNavigate] ✓ 使用 location.href 跳转成功')
-            return
+            const p3 = new Promise((resolve) => {
+                win.location.replace(finalUrl)
+                verifyNavigation(finalUrl, 'location.replace', resolve)
+            })
+            if (await p3) {
+                return // 成功，结束
+            }
         } catch (e) {
-            console.warn('[safeNavigate] ✗ location.href 失败:', e)
+            console.warn('[safeNavigate] ✗ location.replace 异常:', e)
         }
-        
+
         // 策略4: 创建 <a> 标签并模拟点击 (Fallback)
         try {
             const targetDoc = win.document || document
@@ -91,16 +122,22 @@ function safeNavigate(url, targetWindow) {
             targetDoc.body.appendChild(anchor)
             anchor.click()
             
-            setTimeout(() => {
-                try {
-                    targetDoc.body.removeChild(anchor)
-                } catch (e) {}
-            }, 100)
-            
-            console.log('[safeNavigate] ✓ 使用模拟点击跳转')
+            const p4 = new Promise((resolve) => {
+                verifyNavigation(finalUrl, '模拟点击', resolve)
+                setTimeout(() => {
+                    try {
+                        targetDoc.body.removeChild(anchor)
+                    } catch (e) {}
+                }, 100)
+            })
+            if (await p4) {
+                return // 成功，结束
+            }
         } catch (e) {
-            console.error('[safeNavigate] ✗ 所有跳转策略均失败:', e)
+            console.error('[safeNavigate] ✗ 模拟点击异常:', e)
         }
+
+        console.error('[safeNavigate] ✗ 所有跳转策略均失败')
     }
 
     // 3. 执行跳转：优先同步执行以保留用户手势（User Gesture）
