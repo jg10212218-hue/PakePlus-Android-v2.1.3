@@ -50,63 +50,86 @@ const isInWebView = () => {
 // 检测 WebView 环境（全局变量）
 const isWebViewEnvironment = isInWebView()
 console.log('[环境检测] 是否在 WebView 中:', isWebViewEnvironment)
+console.log('[环境检测] User Agent:', navigator.userAgent)
+console.log('[环境检测] Pake API:', typeof window.pake !== 'undefined' ? '✅ 可用' : '❌ 不可用')
 
-// 保存原始的 window.open 引用
+// 保存原始的 window.open 引用（全局）
 const originalWindowOpen = window.open
 
 /**
- * @description 在 WebView 中打开 URL（尝试打开新标签页）
+ * @description 在 WebView 中打开 URL（支持新标签页）
  * @param {string} url - 要打开的 URL
  * @param {string} target - 目标窗口
  * @param {string} features - 窗口特性
  * @returns {Window|null}
  */
 const openUrlInWebView = (url, target, features) => {
-    console.log('[WebView] 检测到 WebView 环境，尝试打开新标签页')
+    console.log('[WebView] 尝试打开 URL:', { url, target, features })
     
-    // 1. Pake WebView（桌面 WebView 框架）
-    if (typeof window.pake !== 'undefined' && window.pake.openUrl) {
-        console.log('[WebView] 使用 Pake API 打开 URL')
-        try {
-            window.pake.openUrl(url)
-            return null
-        } catch (e) {
-            console.warn('[WebView] Pake API 调用失败:', e)
+    // 1. Pake/PakePlus WebView（优先级最高）
+    if (typeof window.pake !== 'undefined') {
+        console.log('[WebView] 检测到 Pake 环境')
+        
+        // 检查 Pake 提供的 API
+        if (typeof window.pake.openUrl === 'function') {
+            console.log('[WebView] 使用 window.pake.openUrl()')
+            try {
+                window.pake.openUrl(url)
+                console.log('[WebView] ✅ Pake API 调用成功')
+                return null
+            } catch (e) {
+                console.error('[WebView] ❌ Pake API 调用失败:', e)
+            }
+        } else if (typeof window.pake.open === 'function') {
+            console.log('[WebView] 使用 window.pake.open()')
+            try {
+                window.pake.open(url)
+                console.log('[WebView] ✅ Pake API 调用成功')
+                return null
+            } catch (e) {
+                console.error('[WebView] ❌ Pake API 调用失败:', e)
+            }
+        } else {
+            console.warn('[WebView] ⚠️ Pake 对象存在但没有可用的 API')
+            console.log('[WebView] Pake 对象:', Object.keys(window.pake))
         }
     }
     
-    // 2. Tauri WebView（桌面 WebView 框架）
+    // 2. Tauri WebView
     if (typeof window.__TAURI__ !== 'undefined' && window.__TAURI__.shell) {
-        console.log('[WebView] 使用 Tauri API 打开 URL')
+        console.log('[WebView] 使用 Tauri API')
         try {
             window.__TAURI__.shell.open(url)
+            console.log('[WebView] ✅ Tauri API 调用成功')
             return null
         } catch (e) {
-            console.warn('[WebView] Tauri API 调用失败:', e)
+            console.error('[WebView] ❌ Tauri API 调用失败:', e)
         }
     }
     
     // 3. 微信小程序 WebView
     if (typeof wx !== 'undefined' && wx.miniProgram) {
-        console.log('[WebView] 检测到微信小程序环境')
+        console.log('[WebView] 使用微信小程序 API')
         try {
             wx.miniProgram.navigateTo({
                 url: `/pages/webview/webview?url=${encodeURIComponent(url)}`
             })
+            console.log('[WebView] ✅ 微信小程序 API 调用成功')
             return null
         } catch (e) {
-            console.warn('[WebView] 微信小程序 API 调用失败:', e)
+            console.error('[WebView] ❌ 微信小程序 API 调用失败:', e)
         }
     }
     
-    // 4. 通用 JSBridge（如果存在）
+    // 4. 通用 JSBridge
     if (typeof window.bridge !== 'undefined' && window.bridge.openUrl) {
-        console.log('[WebView] 使用 JSBridge 打开 URL')
+        console.log('[WebView] 使用 JSBridge')
         try {
             window.bridge.openUrl(url)
+            console.log('[WebView] ✅ JSBridge 调用成功')
             return null
         } catch (e) {
-            console.warn('[WebView] JSBridge 调用失败:', e)
+            console.error('[WebView] ❌ JSBridge 调用失败:', e)
         }
     }
     
@@ -116,12 +139,12 @@ const openUrlInWebView = (url, target, features) => {
         try {
             const newWindow = originalWindowOpen.call(window, url, target || '_blank', features)
             if (newWindow && !newWindow.closed) {
-                console.log('[WebView] ✓ 原生 window.open 成功')
+                console.log('[WebView] ✅ 原生 window.open 成功')
                 return newWindow
             }
-            console.warn('[WebView] 原生 window.open 被阻止或失败')
+            console.warn('[WebView] ⚠️ 原生 window.open 被阻止')
         } catch (e) {
-            console.warn('[WebView] 原生 window.open 调用失败:', e)
+            console.warn('[WebView] ⚠️ 原生 window.open 失败:', e)
         }
     }
     
@@ -143,16 +166,16 @@ const openUrlInWebView = (url, target, features) => {
                 } catch (e) {}
             }, 100)
             
-            console.log('[WebView] ✓ <a> 标签点击完成')
+            console.log('[WebView] ✅ <a> 标签点击完成')
             return null
         } catch (e) {
-            console.warn('[WebView] <a> 标签模拟点击失败:', e)
+            console.error('[WebView] ❌ <a> 标签失败:', e)
         }
     }
     
-    // 7. 终极兜底方案：在当前窗口跳转
-    console.warn('[WebView] ⚠️ 所有新标签页打开方式均失败，将在当前窗口跳转')
-    return null // 返回 null，让调用方使用 safeNavigate
+    // 7. 降级方案标记（不执行跳转，由调用方决定）
+    console.warn('[WebView] ⚠️ 所有新标签页打开方式均失败')
+    return null
 }
 
 /**
@@ -273,7 +296,7 @@ function overrideWindowOpen(targetWindow, targetDocument, label) {
                 return null
             }
             
-            // 尝试打开新标签页
+            // 尝试打开新标签页/新窗口
             console.log(`[window.open ${label}] target=${target || '_blank'}，尝试打开新标签页`)
             
             // 在 WebView 环境中使用适配方案
@@ -281,9 +304,15 @@ function overrideWindowOpen(targetWindow, targetDocument, label) {
                 console.log(`[window.open ${label}] WebView 环境，使用适配方案`)
                 const result = openUrlInWebView(urlStr, target || '_blank', features)
                 if (result === null) {
-                    // openUrlInWebView 返回 null 表示需要降级处理
-                    console.warn(`[window.open ${label}] WebView 打开新标签页失败，降级在当前窗口跳转`)
-                    safeNavigate(urlStr, topWindow)
+                    // openUrlInWebView 返回 null 表示需要检查是否需要降级
+                    console.warn(`[window.open ${label}] ⚠️ WebView 打开新标签页可能失败`)
+                    console.warn(`[window.open ${label}] ⚠️ 如果没有打开新页面，将降级在当前窗口跳转`)
+                    
+                    // 延迟降级，给 WebView API 一些时间
+                    setTimeout(() => {
+                        console.log(`[window.open ${label}] 执行降级：在当前窗口跳转`)
+                        safeNavigate(urlStr, topWindow)
+                    }, 500)
                 }
                 return result
             }
@@ -293,7 +322,7 @@ function overrideWindowOpen(targetWindow, targetDocument, label) {
             try {
                 const newWindow = originalOpen.call(targetWindow, urlStr, target || '_blank', features)
                 if (newWindow && !newWindow.closed) {
-                    console.log(`[window.open ${label}] ✓ 原生 window.open 成功`)
+                    console.log(`[window.open ${label}] ✅ 原生 window.open 成功`)
                     return newWindow
                 }
                 
@@ -311,10 +340,10 @@ function overrideWindowOpen(targetWindow, targetDocument, label) {
                         targetDocument.body.removeChild(link)
                     } catch (e) {}
                 }, 100)
-                console.log(`[window.open ${label}] ✓ 使用 <a> 标签方式`)
+                console.log(`[window.open ${label}] ✅ 使用 <a> 标签方式`)
                 return null
             } catch (e) {
-                console.error(`[window.open ${label}] ✗ 原生 window.open 失败:`, e)
+                console.error(`[window.open ${label}] ❌ 原生 window.open 失败:`, e)
                 // 最终降级：在当前窗口跳转
                 console.warn(`[window.open ${label}] 降级在当前窗口跳转`)
                 safeNavigate(urlStr, topWindow)
@@ -347,9 +376,11 @@ function overrideWindowOpen(targetWindow, targetDocument, label) {
                     if (isWebViewEnvironment) {
                         const result = openUrlInWebView(origin.href, '_blank')
                         if (result === null) {
-                            // 降级处理
-                            console.warn(`[hookClick ${label}] WebView 打开新标签页失败，降级在当前窗口跳转`)
-                            safeNavigate(origin.href, topWindow)
+                            // 延迟降级
+                            setTimeout(() => {
+                                console.warn(`[hookClick ${label}] WebView 打开新标签页失败，降级在当前窗口跳转`)
+                                safeNavigate(origin.href, topWindow)
+                            }, 500)
                         }
                     } else {
                         // 非 WebView 环境，尝试使用原生方式
@@ -366,7 +397,7 @@ function overrideWindowOpen(targetWindow, targetDocument, label) {
                                     targetDocument.body.removeChild(link)
                                 } catch (e) {}
                             }, 100)
-                            console.log(`[hookClick ${label}] ✓ 使用 <a> 标签打开新标签页`)
+                            console.log(`[hookClick ${label}] ✅ 使用 <a> 标签打开新标签页`)
                         } catch (e) {
                             console.error(`[hookClick ${label}] <a> 标签失败，降级处理:`, e)
                             safeNavigate(origin.href, topWindow)
@@ -584,9 +615,11 @@ const hookClick = (e) => {
         if (isWebViewEnvironment) {
             const result = openUrlInWebView(origin.href, '_blank')
             if (result === null) {
-                // 降级处理：在当前窗口跳转
-                console.warn('[hookClick main] WebView 打开新标签页失败，降级在当前窗口跳转')
-                safeNavigate(origin.href)
+                // 延迟降级
+                setTimeout(() => {
+                    console.warn('[hookClick main] WebView 打开新标签页失败，降级在当前窗口跳转')
+                    safeNavigate(origin.href)
+                }, 500)
             }
         } else {
             // 非 WebView 环境，尝试使用原生方式
@@ -603,7 +636,7 @@ const hookClick = (e) => {
                         document.body.removeChild(link)
                     } catch (e) {}
                 }, 100)
-                console.log('[hookClick main] ✓ 使用 <a> 标签打开新标签页')
+                console.log('[hookClick main] ✅ 使用 <a> 标签打开新标签页')
             } catch (e) {
                 console.error('[hookClick main] <a> 标签失败，降级处理:', e)
                 safeNavigate(origin.href)
@@ -662,6 +695,11 @@ window.__vcDiagnose = () => {
     // 2. 原生 API 检测
     console.log('2. 原生 API 可用性:')
     console.log('   - Pake API:', typeof window.pake !== 'undefined' ? '✅ 可用' : '❌ 不可用')
+    if (typeof window.pake !== 'undefined') {
+        console.log('   - Pake 对象键:', Object.keys(window.pake))
+        console.log('   - pake.openUrl:', typeof window.pake.openUrl === 'function' ? '✅ 可用' : '❌ 不可用')
+        console.log('   - pake.open:', typeof window.pake.open === 'function' ? '✅ 可用' : '❌ 不可用')
+    }
     console.log('   - Tauri API:', typeof window.__TAURI__ !== 'undefined' ? '✅ 可用' : '❌ 不可用')
     console.log('   - 微信小程序:', typeof wx !== 'undefined' && wx.miniProgram ? '✅ 可用' : '❌ 不可用')
     console.log('   - JSBridge:', typeof window.bridge !== 'undefined' ? '✅ 可用' : '❌ 不可用')
@@ -691,37 +729,32 @@ window.__vcDiagnose = () => {
     console.log('4. 测试方法:')
     console.log('   方式1: 在控制台运行以下代码测试:')
     console.log('   ```')
-    console.log('   window.open("https://www.baidu.com", "_blank")')
+    console.log('   window.open("https://service.emposat.com/child/station-control/index.html", "_blank")')
     console.log('   ```')
     console.log('')
     console.log('   方式2: 创建测试链接:')
     console.log('   ```')
     console.log('   const link = document.createElement("a")')
-    console.log('   link.href = "https://www.baidu.com"')
+    console.log('   link.href = "https://service.emposat.com/child/station-control/index.html"')
     console.log('   link.target = "_blank"')
     console.log('   link.textContent = "测试新标签页"')
+    console.log('   link.style.cssText = "position:fixed;top:10px;right:10px;z-index:9999;padding:10px;background:red;color:white;"')
     console.log('   document.body.appendChild(link)')
     console.log('   ```')
     console.log('')
     
     // 5. 常见问题
-    console.log('5. 常见问题及解决方案:')
-    console.log('   ❌ 问题: WebView 中无法打开新标签页')
+    console.log('5. PakePlus APK 常见问题:')
+    console.log('   ❌ 问题: iframe 中 window.open 无法打开新标签页')
     console.log('   ✅ 解决:')
-    console.log('      - 检查是否有原生 API（Pake/Tauri/JSBridge）')
-    console.log('      - 如果没有，会降级在当前窗口跳转')
-    console.log('      - 建议联系 WebView 提供方添加打开新标签页的 API')
-    console.log('')
-    console.log('   ❌ 问题: iframe 内链接点击无响应')
-    console.log('   ✅ 解决:')
-    console.log('      - 检查 iframe 是否跨域（跨域无法注入脚本）')
-    console.log('      - 查看 iframe 的 __vcOpenOverridden 标记')
-    console.log('      - 检查控制台日志中的 [hookClick] 输出')
+    console.log('      1. 确保 PakePlus 提供了 window.pake.openUrl 或 window.pake.open API')
+    console.log('      2. 检查控制台日志中的 [WebView] 和 [window.open] 输出')
+    console.log('      3. 如果 Pake API 不可用，会自动降级在当前窗口跳转')
+    console.log('      4. 联系 PakePlus 开发者确认 API 名称和用法')
     console.log('')
     
     console.log('========== 诊断完成 ==========\n')
-    console.log('💡 提示: 如需测试，可在控制台运行 window.open("https://www.baidu.com", "_blank")')
+    console.log('💡 提示: 如需测试，可在控制台运行测试代码')
 }
 
 console.log('💡 提示: 运行 window.__vcDiagnose() 可诊断 WebView 新标签页打开问题')
-
